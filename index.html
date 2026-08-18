@@ -21,27 +21,27 @@
       <span class="brand-mark">✂︎</span>
       <div class="brand-text">
         <h1>Intake</h1>
-        <p>CV sorter &amp; mini ATS</p>
+        <P>CV sorter &amp; mini ATS</P>
       </div>
     </div>
 
     <div id="gateSetup" hidden>
       <h3 class="gate-heading">Set up this console</h3>
-      <p class="gate-note">Choose a password. Nothing is sent anywhere — only its scrambled hash is saved in this browser.</p>
+      <P class="gate-note">Choose a password. Nothing is sent anywhere — only its scrambled hash is saved in this browser.</P>
       <label class="field-label" for="setupPass">New password</label>
       <input id="setupPass" type="password" autocomplete="new-password">
       <label class="field-label" for="setupPassConfirm">Confirm password</label>
       <input id="setupPassConfirm" type="password" autocomplete="new-password">
       <button id="btnCreatePass" class="btn btn-primary btn-block">Create password &amp; open console</button>
-      <p id="setupError" class="gate-error"></p>
+      <P id="setupError" class="gate-error"></P>
     </div>
 
     <div id="gateLogin" hidden>
       <h3 class="gate-heading">Enter password</h3>
-      <p class="gate-note">This console is locked to keep candidate data private.</p>
+      <P class="gate-note">This console is locked to keep candidate data private.</P>
       <input id="loginPass" type="password" autocomplete="current-password" placeholder="Password">
       <button id="btnUnlock" class="btn btn-primary btn-block">Unlock</button>
-      <p id="loginError" class="gate-error"></p>
+      <P id="loginError" class="gate-error"></P>
       <button id="btnForgotPass" class="btn-link">Forgot password / reset this device</button>
     </div>
   </div>
@@ -74,15 +74,15 @@
         await AUTH.setPassword(p1);
         AUTH.goToConsole();
       });
-      document.getElementById("setupPassConfirm").addEventListener("keydown", e => {
-        if (e.key === "Enter") document.getElementById("btnCreatePass").click();
+      document.getElementById("setupPassConfirm").addEventListener("keydown", E => {
+        if (E.key === "Enter") document.getElementById("btnCreatePass").click();
       });
     } else {
       const tryUnlock = async () => {
-        const p = document.getElementById("loginPass").value;
+        const P = document.getElementById("loginPass").value;
         const err = document.getElementById("loginError");
         err.textContent = "";
-        const ok = await AUTH.tryLogin(p);
+        const ok = await AUTH.tryLogin(P);
         if (ok) {
           AUTH.goToConsole();
         } else {
@@ -90,8 +90,8 @@
         }
       };
       document.getElementById("btnUnlock").addEventListener("click", tryUnlock);
-      document.getElementById("loginPass").addEventListener("keydown", e => {
-        if (e.key === "Enter") tryUnlock();
+      document.getElementById("loginPass").addEventListener("keydown", E => {
+        if (E.key === "Enter") tryUnlock();
       });
       document.getElementById("btnForgotPass").addEventListener("click", () => {
         if (confirm("This clears the saved password on this device only (other devices/browsers are unaffected). You'll set a new password immediately after. Continue?")) {
