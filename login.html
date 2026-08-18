@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intake — Sign in</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  /* If already authed, we redirect before paint — this avoids a flash of the form. */
+  html.checking body { visibility: hidden; }
+</style>
+</head>
+<body>
+
+<div class="gate-page">
+  <div class="gate-card">
+    <div class="brand gate-brand">
+      <span class="brand-mark">✂︎</span>
+      <div class="brand-text">
+        <h1>Intake</h1>
+        <p>CV sorter &amp; mini ATS</p>
+      </div>
+    </div>
+
+    <div id="gateSetup" hidden>
+      <h3 class="gate-heading">Set up this console</h3>
+      <p class="gate-note">Choose a password. Nothing is sent anywhere — only its scrambled hash is saved in this browser.</p>
+      <label class="field-label" for="setupPass">New password</label>
+      <input id="setupPass" type="password" autocomplete="new-password">
+      <label class="field-label" for="setupPassConfirm">Confirm password</label>
+      <input id="setupPassConfirm" type="password" autocomplete="new-password">
+      <button id="btnCreatePass" class="btn btn-primary btn-block">Create password &amp; open console</button>
+      <p id="setupError" class="gate-error"></p>
+    </div>
+
+    <div id="gateLogin" hidden>
+      <h3 class="gate-heading">Enter password</h3>
+      <p class="gate-note">This console is locked to keep candidate data private.</p>
+      <input id="loginPass" type="password" autocomplete="current-password" placeholder="Password">
+      <button id="btnUnlock" class="btn btn-primary btn-block">Unlock</button>
+      <p id="loginError" class="gate-error"></p>
+      <button id="btnForgotPass" class="btn-link">Forgot password / reset this device</button>
+    </div>
+  </div>
+</div>
+
+<script src="auth.js"></script>
+<script>
+  document.documentElement.classList.add("checking");
+
+  (async function init() {
+    // Already authed this session? Skip straight to the console.
+    if (AUTH.isAuthed()) {
+      AUTH.goToConsole();
+      return;
+    }
+    document.documentElement.classList.remove("checking");
+
+    const hasPassword = AUTH.hasPassword();
+    document.getElementById("gateSetup").hidden = hasPassword;
+    document.getElementById("gateLogin").hidden = !hasPassword;
+
+    if (!hasPassword) {
+      document.getElementById("btnCreatePass").addEventListener("click", async () => {
+        const p1 = document.getElementById("setupPass").value;
+        const p2 = document.getElementById("setupPassConfirm").value;
+        const err = document.getElementById("setupError");
+        err.textContent = "";
+        if (p1.length < 4) { err.textContent = "Use at least 4 characters."; return; }
+        if (p1 !== p2) { err.textContent = "Passwords don't match."; return; }
+        await AUTH.setPassword(p1);
+        AUTH.goToConsole();
+      });
+      document.getElementById("setupPassConfirm").addEventListener("keydown", e => {
+        if (e.key === "Enter") document.getElementById("btnCreatePass").click();
+      });
+    } else {
+      const tryUnlock = async () => {
+        const p = document.getElementById("loginPass").value;
+        const err = document.getElementById("loginError");
+        err.textContent = "";
+        const ok = await AUTH.tryLogin(p);
+        if (ok) {
+          AUTH.goToConsole();
+        } else {
+          err.textContent = "Wrong password.";
+        }
+      };
+      document.getElementById("btnUnlock").addEventListener("click", tryUnlock);
+      document.getElementById("loginPass").addEventListener("keydown", e => {
+        if (e.key === "Enter") tryUnlock();
+      });
+      document.getElementById("btnForgotPass").addEventListener("click", () => {
+        if (confirm("This clears the saved password on this device only (other devices/browsers are unaffected). You'll set a new password immediately after. Continue?")) {
+          AUTH.resetDevice();
+          location.reload();
+        }
+      });
+    }
+  })();
+</script>
+</body>
+</html>
