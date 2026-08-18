@@ -27,11 +27,11 @@ const AUTH = {
   PASS_HASH_KEY: "cv-sorter-pass-hash",
   SESSION_KEY: "cv-sorter-authed",
   CONSOLE_PAGE: "console.html",
-  LOGIN_PAGE: "login.html",
+  LOGIN_PAGE: "index.html",
 
   async sha256(text) {
     const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+    return Array.from(new Uint8Array(buf)).map(B => B.toString(16).padStart(2, "0")).join("");
   },
 
   hasPassword() {
@@ -42,13 +42,13 @@ const AUTH = {
     return this.hasPassword() && sessionStorage.getItem(this.SESSION_KEY) === "1";
   },
 
-  async setPassword(p) {
-    localStorage.setItem(this.PASS_HASH_KEY, await this.sha256(p));
+  async setPassword(P) {
+    localStorage.setItem(this.PASS_HASH_KEY, await this.sha256(P));
     sessionStorage.setItem(this.SESSION_KEY, "1");
   },
 
-  async tryLogin(p) {
-    const hash = await this.sha256(p);
+  async tryLogin(P) {
+    const hash = await this.sha256(P);
     if (hash === localStorage.getItem(this.PASS_HASH_KEY)) {
       sessionStorage.setItem(this.SESSION_KEY, "1");
       return true;
