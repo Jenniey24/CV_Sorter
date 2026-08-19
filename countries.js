@@ -59,3 +59,16 @@ const COUNTRY_NAMES = [
   "Vietnam","United Arab Emirates","UAE","Saudi Arabia","Qatar","Kuwait","Bahrain","Oman",
   "Israel","Lebanon","Jordan","Brazil","Mexico","Argentina","Chile","Colombia","Peru",
 ];
+
+// A handful of major cities as a last-resort country hint, for CVs that
+// give an address/city but never spell out the country name.
+const CITY_TO_COUNTRY = {
+  "accra": "Ghana", "kumasi": "Ghana", "tema": "Ghana", "takoradi": "Ghana",
+  "lagos": "Nigeria", "abuja": "Nigeria", "port harcourt": "Nigeria", "ibadan": "Nigeria", "kano": "Nigeria",
+  "nairobi": "Kenya", "mombasa": "Kenya", "kampala": "Uganda", "dar es salaam": "Tanzania",
+  "johannesburg": "South Africa", "cape town": "South Africa", "pretoria": "South Africa",
+  "cairo": "Egypt", "casablanca": "Morocco", "tunis": "Tunisia",
+  "dakar": "Senegal", "abidjan": "Ivory Coast",
+  "london": "United Kingdom", "manchester": "United Kingdom", "dubai": "United Arab Emirates",
+  "toronto": "Canada", "new york": "United States", "houston": "United States",
+};
