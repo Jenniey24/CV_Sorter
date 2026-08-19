@@ -1,31 +1,23 @@
-/* auth.js — shared password-gate logic for login.html and console.html.
+/* auth.js — shared password-gate logic for index.html (login) and console.html.
  *
- * Client-side only: this keeps a casual visitor from opening a shared
- * link and browsing candidate data. It is NOT a substitute for real
- * per-user accounts or a server-side check. The password itself is
- * never stored anywhere — only its SHA-256 hash, in this browser's
- * localStorage.
+ * The password is now checked server-side, in apps-script.gs, against a
+ * hash stored in that project's Script Properties — not in this browser,
+ * not in any file. That means it's genuinely ONE password shared by
+ * everyone who has the link, not a per-device setup. The browser only
+ * ever handles the SHA-256 hash of the password, never the plaintext —
+ * that hash also doubles as the credential that authorizes writes to
+ * your Google Sheet (see the "list"/"append" checks in apps-script.gs),
+ * so there's no separate API secret to configure anymore.
  *
- * IMPORTANT LIMITATION, read this before relying on it: the hash lives
- * in THIS BROWSER's localStorage, not on any server. That means:
- *   - It only locks the app on browsers that have already had a
- *     password set on them. A browser that's never opened the link
- *     before will land on the SET UP screen and let whoever's sitting
- *     there choose a fresh password — there's no server to check
- *     against, so nothing stops that.
- *   - It does not sync between devices or browsers. If you want the
- *     same password to gate everyone's access, you're really relying
- *     on people only opening the link on a device you've already set
- *     up, or on the "screen door" effect of most people not going
- *     digging in dev tools.
- * See the README section "How locked-down is locked" for the full
- * picture, including what's actually enforced server-side (the Sheet
- * API secret).
+ * Requires config.js (APPS_SCRIPT_URL) to be loaded first.
+ *
+ * Being logged in only lasts for this browser tab's session
+ * (sessionStorage) — closing the tab logs you out, same as before.
  */
 
 const AUTH = {
-  PASS_HASH_KEY: "cv-sorter-pass-hash",
-  SESSION_KEY: "cv-sorter-authed",
+  SESSION_AUTHED_KEY: "cv-sorter-authed",
+  SESSION_HASH_KEY: "cv-sorter-pw-hash",
   CONSOLE_PAGE: "console.html",
   LOGIN_PAGE: "index.html",
 
@@ -34,35 +26,61 @@ const AUTH = {
     return Array.from(new Uint8Array(buf)).map(B => B.toString(16).padStart(2, "0")).join("");
   },
 
-  hasPassword() {
-    return Boolean(localStorage.getItem(this.PASS_HASH_KEY));
+  async request(payload) {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
+  // { ok, hasPassword }
+  async status() {
+    return this.request({ action: "authStatus" });
+  },
+
+  // First-ever visitor after a fresh deploy calls this to set the one
+  // shared password. Fails if a password is already set.
+  async setup(password) {
+    const hash = await this.sha256(password);
+    const res = await this.request({ action: "authSetup", passwordHash: hash });
+    if (res && res.ok) this._markAuthed(hash);
+    return res;
+  },
+
+  async login(password) {
+    const hash = await this.sha256(password);
+    const res = await this.request({ action: "authLogin", passwordHash: hash });
+    if (res && res.ok) this._markAuthed(hash);
+    return res;
+  },
+
+  // Clears the shared password server-side so a new one can be set.
+  // Requires ADMIN_RESET_CODE from apps-script.gs.
+  async resetWithAdminCode(adminCode) {
+    return this.request({ action: "authReset", adminCode });
+  },
+
+  _markAuthed(hash) {
+    sessionStorage.setItem(this.SESSION_AUTHED_KEY, "1");
+    sessionStorage.setItem(this.SESSION_HASH_KEY, hash);
   },
 
   isAuthed() {
-    return this.hasPassword() && sessionStorage.getItem(this.SESSION_KEY) === "1";
+    return sessionStorage.getItem(this.SESSION_AUTHED_KEY) === "1" &&
+      Boolean(sessionStorage.getItem(this.SESSION_HASH_KEY));
   },
 
-  async setPassword(P) {
-    localStorage.setItem(this.PASS_HASH_KEY, await this.sha256(P));
-    sessionStorage.setItem(this.SESSION_KEY, "1");
-  },
-
-  async tryLogin(P) {
-    const hash = await this.sha256(P);
-    if (hash === localStorage.getItem(this.PASS_HASH_KEY)) {
-      sessionStorage.setItem(this.SESSION_KEY, "1");
-      return true;
-    }
-    return false;
+  // The password hash for this session — send with any request to
+  // apps-script.gs that needs write/read access to the sheet.
+  passwordHash() {
+    return sessionStorage.getItem(this.SESSION_HASH_KEY) || "";
   },
 
   logout() {
-    sessionStorage.removeItem(this.SESSION_KEY);
-  },
-
-  resetDevice() {
-    localStorage.removeItem(this.PASS_HASH_KEY);
-    sessionStorage.removeItem(this.SESSION_KEY);
+    sessionStorage.removeItem(this.SESSION_AUTHED_KEY);
+    sessionStorage.removeItem(this.SESSION_HASH_KEY);
   },
 
   goToConsole() {
@@ -75,7 +93,7 @@ const AUTH = {
 
   // Call at the very top of console.html, before rendering anything real.
   // Returns true if the visitor is authed; otherwise bounces them to
-  // login.html and returns false.
+  // index.html and returns false.
   guard() {
     if (!this.isAuthed()) {
       this.goToLogin();
