@@ -9,4 +9,4 @@
  * sheet. Every request also has to carry the console password's hash,
  * which is checked server-side in apps-script.gs — see auth.js.
  */
-const APPS_SCRIPT_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzI-YMpqh6gjM4svTvLql34GVGLjUCikBvyt04Hy4x5gscu7mBz7H47dJUexwICKMRe/exec";
