@@ -126,17 +126,17 @@ function looksLikeName(line) {
   if (/\d/.test(trimmed)) return false;
   if (/@/.test(trimmed)) return false;
   const lower = trimmed.toLowerCase();
-  if (HEADER_WORDS.some(w => lower === w || lower.startsWith(w + ":"))) return false;
+  if (HEADER_WORDS.some(W => lower === W || lower.startsWith(W + ":"))) return false;
   const words = trimmed.split(/\s+/).filter(Boolean);
   if (words.length < 2 || words.length > 4) return false;
   // Each word should look like a name token (allow hyphens/apostrophes, all-caps or capitalized).
   const nameWordRe = /^[A-Z][a-zA-Z'\-.]*$/;
   const allCapsWordRe = /^[A-Z'\-]{2,}$/;
-  return words.every(w => nameWordRe.test(w) || allCapsWordRe.test(w));
+  return words.every(W => nameWordRe.test(W) || allCapsWordRe.test(W));
 }
 
 function extractName(text, fileName) {
-  const lines = text.split("\n").map(l => l.trim()).filter(Boolean).slice(0, 20);
+  const lines = text.split("\n").map(L => L.trim()).filter(Boolean).slice(0, 20);
   for (const line of lines) {
     if (looksLikeName(line)) {
       return toTitleCase(line);
@@ -154,16 +154,16 @@ function toTitleCase(str) {
   return str
     .toLowerCase()
     .split(" ")
-    .map(w => w ? w[0].toUpperCase() + w.slice(1) : w)
+    .map(W => W ? W[0].toUpperCase() + W.slice(1) : W)
     .join(" ")
     .trim();
 }
 
 // ---------- LinkedIn ----------
 function extractLinkedIn(text) {
-  const m = text.match(/(?:https?:\/\/)?(?:[a-z]{2,3}\.)?linkedin\.com\/(?:in|pub)\/[a-zA-Z0-9\-_%]+\/?/i);
-  if (!m) return "";
-  let url = m[0];
+  const M = text.match(/(?:https?:\/\/)?(?:[a-z]{2,3}\.)?linkedin\.com\/(?:in|pub)\/[a-zA-Z0-9\-_%]+\/?/i);
+  if (!M) return "";
+  let url = M[0];
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
   return url.replace(/\/$/, "");
 }
@@ -174,7 +174,7 @@ function extractYearsExperience(text) {
   // usually a summary line and the most reliable signal.
   const explicit = text.match(/(\d{1,2})\+?\s*(?:years?|yrs?)\s*(?:of\s*)?(?:relevant\s*|professional\s*|work(?:ing)?\s*)?experience/gi);
   if (explicit && explicit.length) {
-    const nums = explicit.map(s => parseInt(s.match(/\d{1,2}/)[0], 10)).filter(n => n > 0 && n <= 50);
+    const nums = explicit.map(S => parseInt(S.match(/\d{1,2}/)[0], 10)).filter(N => N > 0 && N <= 50);
     if (nums.length) return Math.max(...nums);
   }
   // Fallback: infer from an "Experience" section's date ranges (e.g. 2018 - 2023, 2019 - Present).
@@ -182,8 +182,8 @@ function extractYearsExperience(text) {
   if (yearMatches.length) {
     const currentYear = new Date().getFullYear();
     let earliest = currentYear;
-    yearMatches.forEach(m => {
-      const start = parseInt(m[1], 10);
+    yearMatches.forEach(M => {
+      const start = parseInt(M[1], 10);
       if (start < earliest) earliest = start;
     });
     const span = currentYear - earliest;
@@ -194,30 +194,30 @@ function extractYearsExperience(text) {
 
 // ---------- tags / skills ----------
 function extractTags(text) {
-  const lines = text.split("\n").map(l => l.trim());
-  const isHeader = (l) => {
-    const lower = l.toLowerCase().replace(/:$/, "");
-    return HEADER_WORDS.some(w => lower === w);
+  const lines = text.split("\n").map(L => L.trim());
+  const isHeader = (L) => {
+    const lower = L.toLowerCase().replace(/:$/, "");
+    return HEADER_WORDS.some(W => lower === W);
   };
   let start = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const lower = lines[i].toLowerCase().replace(/:$/, "");
+  for (let I = 0; I < lines.length; I++) {
+    const lower = lines[I].toLowerCase().replace(/:$/, "");
     if (lower === "skills" || lower === "core skills" || lower === "key skills" || lower === "technical skills") {
-      start = i + 1;
+      start = I + 1;
       break;
     }
   }
   if (start === -1) return [];
   let end = lines.length;
-  for (let i = start; i < lines.length; i++) {
-    if (lines[i] && isHeader(lines[i]) && lines[i].toLowerCase() !== "skills") { end = i; break; }
+  for (let I = start; I < lines.length; I++) {
+    if (lines[I] && isHeader(lines[I]) && lines[I].toLowerCase() !== "skills") { end = I; break; }
   }
   const block = lines.slice(start, Math.min(end, start + 12)).join(", ");
-  const raw = block.split(/[,•|;\u2022\n]/).map(s => s.trim()).filter(Boolean);
+  const raw = block.split(/[,•|;\u2022\n]/).map(S => S.trim()).filter(Boolean);
   const tags = [];
   const seen = new Set();
-  for (const r of raw) {
-    const clean = r.replace(/^[-–—•*]\s*/, "").trim();
+  for (const R of raw) {
+    const clean = R.replace(/^[-–—•*]\s*/, "").trim();
     if (!clean || clean.length < 2 || clean.length > 30) continue;
     const key = clean.toLowerCase();
     if (seen.has(key)) continue;
