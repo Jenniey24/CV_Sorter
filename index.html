@@ -21,35 +21,52 @@
       <span class="brand-mark">✂︎</span>
       <div class="brand-text">
         <h1>Intake</h1>
-        <P>CV sorter &amp; mini ATS</P>
+        <p>CV sorter &amp; mini ATS</p>
       </div>
+    </div>
+
+    <div id="gateLoading">
+      <p class="gate-note">Checking…</p>
+    </div>
+
+    <div id="gateError" hidden>
+      <p class="gate-error" id="gateErrorMsg"></p>
     </div>
 
     <div id="gateSetup" hidden>
       <h3 class="gate-heading">Set up this console</h3>
-      <P class="gate-note">Choose a password. Nothing is sent anywhere — only its scrambled hash is saved in this browser.</P>
+      <p class="gate-note">Choose a password. This becomes the ONE password shared by everyone who has the link — set it now, before sharing the link with anyone. Nothing is sent anywhere in the clear; only its scrambled hash is checked against your Google Sheet's backend.</p>
       <label class="field-label" for="setupPass">New password</label>
       <input id="setupPass" type="password" autocomplete="new-password">
       <label class="field-label" for="setupPassConfirm">Confirm password</label>
       <input id="setupPassConfirm" type="password" autocomplete="new-password">
       <button id="btnCreatePass" class="btn btn-primary btn-block">Create password &amp; open console</button>
-      <P id="setupError" class="gate-error"></P>
+      <p id="setupError" class="gate-error"></p>
     </div>
 
     <div id="gateLogin" hidden>
       <h3 class="gate-heading">Enter password</h3>
-      <P class="gate-note">This console is locked to keep candidate data private.</P>
+      <p class="gate-note">This console is locked to keep candidate data private.</p>
       <input id="loginPass" type="password" autocomplete="current-password" placeholder="Password">
       <button id="btnUnlock" class="btn btn-primary btn-block">Unlock</button>
-      <P id="loginError" class="gate-error"></P>
-      <button id="btnForgotPass" class="btn-link">Forgot password / reset this device</button>
+      <p id="loginError" class="gate-error"></p>
+      <button id="btnForgotPass" class="btn-link">Forgot password? (admin reset)</button>
     </div>
   </div>
 </div>
 
+<script src="config.js"></script>
 <script src="auth.js"></script>
 <script>
+  const el = (id) => document.getElementById(id);
   document.documentElement.classList.add("checking");
+
+  function showError(msg) {
+    el("gateLoading").hidden = true;
+    el("gateError").hidden = false;
+    el("gateErrorMsg").textContent = msg;
+    document.documentElement.classList.remove("checking");
+  }
 
   (async function init() {
     // Already authed this session? Skip straight to the console.
@@ -59,44 +76,89 @@
     }
     document.documentElement.classList.remove("checking");
 
-    const hasPassword = AUTH.hasPassword();
-    document.getElementById("gateSetup").hidden = hasPassword;
-    document.getElementById("gateLogin").hidden = !hasPassword;
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf("PASTE_YOUR") !== -1) {
+      showError("This app isn't connected to a backend yet. Deploy apps-script.gs and paste the Web App URL into config.js (see README).");
+      return;
+    }
+
+    let status;
+    try {
+      status = await AUTH.status();
+    } catch (err) {
+      showError("Couldn't reach the sheet backend. Check your internet connection, and that the URL in config.js is correct and the Apps Script is deployed with access set to \"Anyone.\"");
+      return;
+    }
+    if (!status || !status.ok) {
+      showError("The backend didn't respond as expected. Check the Apps Script deployment matches apps-script.gs from this project.");
+      return;
+    }
+
+    el("gateLoading").hidden = true;
+    const hasPassword = status.hasPassword;
+    el("gateSetup").hidden = hasPassword;
+    el("gateLogin").hidden = !hasPassword;
 
     if (!hasPassword) {
-      document.getElementById("btnCreatePass").addEventListener("click", async () => {
-        const p1 = document.getElementById("setupPass").value;
-        const p2 = document.getElementById("setupPassConfirm").value;
-        const err = document.getElementById("setupError");
+      el("btnCreatePass").addEventListener("click", async () => {
+        const p1 = el("setupPass").value;
+        const p2 = el("setupPassConfirm").value;
+        const err = el("setupError");
         err.textContent = "";
         if (p1.length < 4) { err.textContent = "Use at least 4 characters."; return; }
         if (p1 !== p2) { err.textContent = "Passwords don't match."; return; }
-        await AUTH.setPassword(p1);
-        AUTH.goToConsole();
+        el("btnCreatePass").disabled = true;
+        try {
+          const res = await AUTH.setup(p1);
+          if (res && res.ok) {
+            AUTH.goToConsole();
+          } else {
+            err.textContent = (res && res.error) || "Couldn't set the password — try again.";
+            el("btnCreatePass").disabled = false;
+          }
+        } catch (E) {
+          err.textContent = "Couldn't reach the backend — check your connection.";
+          el("btnCreatePass").disabled = false;
+        }
       });
-      document.getElementById("setupPassConfirm").addEventListener("keydown", E => {
-        if (E.key === "Enter") document.getElementById("btnCreatePass").click();
+      el("setupPassConfirm").addEventListener("keydown", E => {
+        if (E.key === "Enter") el("btnCreatePass").click();
       });
     } else {
       const tryUnlock = async () => {
-        const P = document.getElementById("loginPass").value;
-        const err = document.getElementById("loginError");
+        const P = el("loginPass").value;
+        const err = el("loginError");
         err.textContent = "";
-        const ok = await AUTH.tryLogin(P);
-        if (ok) {
-          AUTH.goToConsole();
-        } else {
-          err.textContent = "Wrong password.";
+        el("btnUnlock").disabled = true;
+        try {
+          const res = await AUTH.login(P);
+          if (res && res.ok) {
+            AUTH.goToConsole();
+            return;
+          } else {
+            err.textContent = "Wrong password.";
+          }
+        } catch (E) {
+          err.textContent = "Couldn't reach the backend — check your connection.";
         }
+        el("btnUnlock").disabled = false;
       };
-      document.getElementById("btnUnlock").addEventListener("click", tryUnlock);
-      document.getElementById("loginPass").addEventListener("keydown", E => {
+      el("btnUnlock").addEventListener("click", tryUnlock);
+      el("loginPass").addEventListener("keydown", E => {
         if (E.key === "Enter") tryUnlock();
       });
-      document.getElementById("btnForgotPass").addEventListener("click", () => {
-        if (confirm("This clears the saved password on this device only (other devices/browsers are unaffected). You'll set a new password immediately after. Continue?")) {
-          AUTH.resetDevice();
-          location.reload();
+      el("btnForgotPass").addEventListener("click", async () => {
+        const code = prompt("Enter the admin reset code (set as ADMIN_RESET_CODE in apps-script.gs):");
+        if (!code) return;
+        try {
+          const res = await AUTH.resetWithAdminCode(code);
+          if (res && res.ok) {
+            alert("Password cleared. Reloading so you can set a new one.");
+            location.reload();
+          } else {
+            alert("That admin code was rejected.");
+          }
+        } catch (E) {
+          alert("Couldn't reach the backend.");
         }
       });
     }
