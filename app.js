@@ -1,5 +1,5 @@
 /* app.js — state + UI wiring for the CV intake manifest.
-   Auth lives in auth.js / login.html now — this file assumes the
+   Auth lives in auth.js / index.html now — this file assumes the
    visitor is already authed (console.html's guard() runs first). */
 
 const el = (id) => document.getElementById(id);
@@ -133,11 +133,9 @@ function statusLabel(s) {
 }
 
 async function fetchKnownFromSheet() {
-  const url = getSavedUrl();
-  const secret = getSavedSecret();
-  if (!url) return;
+  if (!hasSheetBackend()) return;
   try {
-    const res = await sheetRequest(url, { action: "list", secret });
+    const res = await sheetRequest({ action: "list", passwordHash: AUTH.passwordHash() });
     if (res && res.ok) {
       state.knownEmails = new Set((res.emails || []).map(e => e.toLowerCase()));
       state.knownPhones = new Set(res.phones || []);
@@ -154,7 +152,7 @@ async function processQueue() {
   if (!pendingFiles.length) return;
   el("btnProcess").disabled = true;
 
-  if (getSavedUrl() && !state.knownFetched) {
+  if (hasSheetBackend() && !state.knownFetched) {
     el("btnProcess").textContent = "Checking sheet history…";
     await fetchKnownFromSheet();
   }
@@ -787,19 +785,15 @@ function downloadBlob(content, filename, mime) {
 }
 
 // ---------- settings / Google Sheet connection ----------
-const SETTINGS_KEY = "cv-sorter-webapp-url";
-const SECRET_KEY = "cv-sorter-api-secret";
-
-function getSavedUrl() {
-  return localStorage.getItem(SETTINGS_KEY) || "";
-}
-function getSavedSecret() {
-  return localStorage.getItem(SECRET_KEY) || "";
+// The backend URL lives in config.js (committed once, shared by everyone).
+// There's no per-browser URL/secret to save anymore — the session
+// password (AUTH.passwordHash()) is what authorizes reads/writes.
+function hasSheetBackend() {
+  return Boolean(typeof APPS_SCRIPT_URL !== "undefined" && APPS_SCRIPT_URL && APPS_SCRIPT_URL.indexOf("PASTE_YOUR") === -1);
 }
 function refreshSheetStatus() {
-  const url = getSavedUrl();
   const badge = el("sheetStatus");
-  if (url) {
+  if (hasSheetBackend()) {
     badge.textContent = "Sheet connected";
     badge.classList.add("connected");
   } else {
@@ -810,8 +804,6 @@ function refreshSheetStatus() {
 refreshSheetStatus();
 
 el("btnSettings").addEventListener("click", () => {
-  el("webAppUrl").value = getSavedUrl();
-  el("apiSecret").value = getSavedSecret();
   el("settingsStatus").textContent = "";
   el("settingsModal").hidden = false;
 });
@@ -820,23 +812,12 @@ el("settingsModal").addEventListener("click", e => {
   if (e.target === el("settingsModal")) el("settingsModal").hidden = true;
 });
 
-el("btnSaveSettings").addEventListener("click", () => {
-  const url = el("webAppUrl").value.trim();
-  const secret = el("apiSecret").value.trim();
-  localStorage.setItem(SETTINGS_KEY, url);
-  localStorage.setItem(SECRET_KEY, secret);
-  refreshSheetStatus();
-  el("settingsStatus").textContent = url ? "Saved." : "Cleared — no sheet connected.";
-  el("settingsStatus").className = "settings-status ok";
-});
-
 el("btnTestSettings").addEventListener("click", async () => {
-  const url = el("webAppUrl").value.trim();
-  if (!url) { setSettingsErr("Paste your Web App URL first."); return; }
+  if (!hasSheetBackend()) { setSettingsErr("No backend configured yet — set APPS_SCRIPT_URL in config.js."); return; }
   el("settingsStatus").textContent = "Testing…";
   el("settingsStatus").className = "settings-status";
   try {
-    const res = await sheetRequest(url, { action: "ping", secret: el("apiSecret").value.trim() });
+    const res = await sheetRequest({ action: "ping" });
     if (res && res.ok) {
       el("settingsStatus").textContent = "Connected — sheet says hello.";
       el("settingsStatus").className = "settings-status ok";
@@ -844,7 +825,7 @@ el("btnTestSettings").addEventListener("click", async () => {
       setSettingsErr("Reached the script, but it didn't confirm. Check the Apps Script code matches apps-script.gs.");
     }
   } catch (err) {
-    setSettingsErr("Couldn't reach that URL. Re-check the deployment (see README).");
+    setSettingsErr("Couldn't reach the backend. Re-check the URL in config.js and the deployment (see README).");
   }
 });
 function setSettingsErr(msg) {
@@ -861,10 +842,10 @@ el("btnClearAll").addEventListener("click", () => {
   toast("Manifest cleared from this browser");
 });
 
-async function sheetRequest(url, payload) {
+async function sheetRequest(payload) {
   // Apps Script web apps don't support CORS preflight, so we send
   // text/plain and parse JSON on the server side of apps-script.gs.
-  const res = await fetch(url, {
+  const res = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify(payload),
@@ -873,8 +854,7 @@ async function sheetRequest(url, payload) {
 }
 
 el("btnPushSheet").addEventListener("click", async () => {
-  const url = getSavedUrl();
-  if (!url) { el("btnSettings").click(); return; }
+  if (!hasSheetBackend()) { el("btnSettings").click(); return; }
   const rows = state.candidates.filter(c => !c.pushed);
   if (!rows.length) { setPushStatus("Nothing new to push — everything's already in the sheet.", true); return; }
 
@@ -882,7 +862,7 @@ el("btnPushSheet").addEventListener("click", async () => {
   try {
     const payload = {
       action: "append",
-      secret: getSavedSecret(),
+      passwordHash: AUTH.passwordHash(),
       rows: rows.map(c => ({
         name: c.name, email: c.email, phone: c.phone, linkedin: c.linkedin || "",
         country: c.country, yearsExp: c.yearsExp ?? "", tags: (c.tags || []).join("; "),
@@ -897,7 +877,7 @@ el("btnPushSheet").addEventListener("click", async () => {
       scheduleSave();
       setPushStatus(`Pushed ${rows.length} row${rows.length === 1 ? "" : "s"} to the sheet.`, true);
     } else if (res && res.error === "Unauthorized") {
-      setPushStatus("Sheet rejected the request — the API secret in Settings doesn't match apps-script.gs.", false);
+      setPushStatus("Sheet rejected the request — try logging out and back in, or check the deployment in apps-script.gs.", false);
     } else {
       setPushStatus("Sheet didn't confirm the write — check the Apps Script deployment.", false);
     }
