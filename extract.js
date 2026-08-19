@@ -1,7 +1,6 @@
 /* extract.js — turns a CV file into plain text, then plain text into
-   candidate fields. Heuristic, not perfect — the manifest table (and
-   candidate drawer) are always editable so anything mis-read is a
-   two-second fix. */
+   candidate fields. Heuristic, not perfect — the manifest table is
+   always editable so anything mis-read is a two-second fix. */
 
 if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -11,6 +10,7 @@ if (window.pdfjsLib) {
 const HEADER_WORDS = [
   "curriculum vitae","résumé","resume","personal information","personal details",
   "contact information","contact details","profile","professional profile","summary",
+  "professional summary","career summary","executive summary",
   "objective","career objective","address","email","phone","mobile","whatsapp",
   "date of birth","nationality","gender","marital status","references","reference",
   "education","experience","work experience","skills","certifications","languages",
@@ -64,41 +64,93 @@ function extractEmail(text) {
 }
 
 function extractPhone(text) {
-  const labelRe = /(whats\s?app|mobile|phone|tel(?:ephone)?|cell|contact)\s*(?:no\.?|number)?\s*[:\-]?\s*(\+?[\d][\d\s\-().]{6,20}\d)/gi;
+  // "(0)" is a trunk-prefix marker (e.g. "+233 (0) 20 324 3492" meaning
+  // "drop the 0 when dialing internationally") — strip it before matching,
+  // otherwise it breaks the regex and silently drops the country code.
+  const cleanedText = text.replace(/\(\s*0\s*\)/g, " ");
+
+  const labelRe = /(whats\s?app|mobile|phone|tel(?:ephone)?|cell|contact)\s*(?:no\.?|number)?\s*[:\-]?\s*\[?(\+?[\d][\d\s\-().]{6,20}\d)\]?/gi;
   const candidates = [];
   let m;
-  while ((m = labelRe.exec(text)) !== null) {
-    candidates.push({ raw: m[2], labeled: /whats\s?app/i.test(m[1]) ? 2 : 1 });
+  while ((m = labelRe.exec(cleanedText)) !== null) {
+    const start = m.index + m[0].indexOf(m[2]);
+    candidates.push({ raw: m[2], labeled: /whats\s?app/i.test(m[1]) ? 2 : 1, start, end: start + m[2].length });
   }
   const anyRe = /(\+\d{1,3}[\s\-]?)?\(?\d{2,4}\)?[\s\-]?\d{3,4}[\s\-]?\d{3,4}(?:[\s\-]?\d{2,4})?/g;
-  while ((m = anyRe.exec(text)) !== null) {
+  while ((m = anyRe.exec(cleanedText)) !== null) {
     const digits = m[0].replace(/\D/g, "");
     if (digits.length >= 8 && digits.length <= 15) {
-      candidates.push({ raw: m[0], labeled: 0 });
+      candidates.push({ raw: m[0], labeled: 0, start: m.index, end: m.index + m[0].length });
     }
+  }
+  // A second pass for unbroken digit runs catches numbers the chunked
+  // pattern above sometimes truncates by a digit.
+  const runRe = /\d{9,15}/g;
+  while ((m = runRe.exec(cleanedText)) !== null) {
+    candidates.push({ raw: m[0], labeled: 0, start: m.index, end: m.index + m[0].length });
   }
   if (!candidates.length) return "";
 
-  // Prefer WhatsApp-labeled, then any labeled, then plain — and prefer ones with a leading +.
-  candidates.sort((a, b) => {
+  // Different regexes can each capture only *part* of the same real number
+  // (e.g. the chunked pattern grabs "233 54038038" while the digit-run
+  // pattern separately grabs "540380387" one character over) — so instead
+  // of picking whichever single match "wins", merge any candidates whose
+  // text spans overlap into one group and re-read the *full* span from the
+  // document. That guarantees the merged result isn't missing a digit
+  // either match cut off on its own. Candidates that don't overlap are
+  // genuinely different numbers and are kept separate.
+  candidates.sort((a, b) => a.start - b.start);
+  const groups = [];
+  candidates.forEach(c => {
+    const last = groups[groups.length - 1];
+    if (last && c.start <= last.end) {
+      last.end = Math.max(last.end, c.end);
+      last.labeled = Math.max(last.labeled, c.labeled);
+    } else {
+      groups.push({ start: c.start, end: c.end, labeled: c.labeled });
+    }
+  });
+  groups.forEach(g => (g.raw = cleanedText.slice(g.start, g.end)));
+
+  // Prefer WhatsApp-labeled, then any labeled, then a leading +; ties keep
+  // first-occurrence order, since the first-listed number on a CV is
+  // almost always the candidate's own primary contact rather than a
+  // reference's number further down the page.
+  groups.sort((a, b) => {
     if (b.labeled !== a.labeled) return b.labeled - a.labeled;
     const aPlus = a.raw.trim().startsWith("+") ? 1 : 0;
     const bPlus = b.raw.trim().startsWith("+") ? 1 : 0;
-    return bPlus - aPlus;
+    if (bPlus !== aPlus) return bPlus - aPlus;
+    return a.start - b.start;
   });
 
-  return formatPhone(candidates[0].raw);
+  return formatPhone(groups[0].raw);
 }
 
 function formatPhone(raw) {
-  let digits = raw.replace(/[^\d+]/g, "");
-  if (!digits.startsWith("+")) {
-    // No leading + found in text — try to infer from a matched dial code
-    // only when the number is long enough to plausibly include one;
-    // otherwise leave as-is for the user to correct.
-    if (digits.length > 10) digits = "+" + digits;
+  // Just clean the characters here — country-code normalization happens
+  // separately in normalizePhoneWithCountry, once we know the country.
+  return raw.replace(/\(\s*0\s*\)/g, "").replace(/[^\d+]/g, "");
+}
+
+// Reverse lookup built from DIAL_CODES — first dial code listed per country wins.
+const COUNTRY_TO_DIAL = {};
+DIAL_CODES.forEach(([code, country]) => {
+  if (!(country in COUNTRY_TO_DIAL)) COUNTRY_TO_DIAL[country] = code;
+});
+
+function normalizePhoneWithCountry(phone, country) {
+  if (!phone) return phone;
+  if (phone.startsWith("+")) return phone; // already has a country code
+  const dial = COUNTRY_TO_DIAL[country];
+  if (!dial) return phone; // don't guess if we don't know the country
+  let digits = phone.replace(/\D/g, "");
+  if (digits.startsWith(dial)) {
+    // Number already includes the dial code, just missing the "+" — don't double it up.
+    return "+" + digits;
   }
-  return digits;
+  digits = digits.replace(/^0+/, ""); // drop local trunk zero(s)
+  return "+" + dial + digits;
 }
 
 function extractCountry(text, phone) {
@@ -117,6 +169,10 @@ function extractCountry(text, phone) {
       if (digits.startsWith(code)) return country;
     }
   }
+  // 3) Last resort: a recognizable major city in the address.
+  for (const city in CITY_TO_COUNTRY) {
+    if (new RegExp("\\b" + city + "\\b", "i").test(lower)) return CITY_TO_COUNTRY[city];
+  }
   return "";
 }
 
@@ -126,28 +182,47 @@ function looksLikeName(line) {
   if (/\d/.test(trimmed)) return false;
   if (/@/.test(trimmed)) return false;
   const lower = trimmed.toLowerCase();
-  if (HEADER_WORDS.some(W => lower === W || lower.startsWith(W + ":"))) return false;
+  if (HEADER_WORDS.some(w => lower === w || lower.startsWith(w + ":"))) return false;
   const words = trimmed.split(/\s+/).filter(Boolean);
   if (words.length < 2 || words.length > 4) return false;
   // Each word should look like a name token (allow hyphens/apostrophes, all-caps or capitalized).
   const nameWordRe = /^[A-Z][a-zA-Z'\-.]*$/;
   const allCapsWordRe = /^[A-Z'\-]{2,}$/;
-  return words.every(W => nameWordRe.test(W) || allCapsWordRe.test(W));
+  return words.every(w => nameWordRe.test(w) || allCapsWordRe.test(w));
 }
 
 function extractName(text, fileName) {
+  // An explicit "Name:" style label is more reliable than the generic
+  // heuristic below, but only near the top of the document — a CV's
+  // References section can list a referee as "Name: Mrs. Catherine Osei",
+  // and that's not the candidate. Restrict the label search to roughly
+  // the personal-details header block.
+  const headerText = text.split("\n").slice(0, 15).join("\n");
+  const labelMatch = headerText.match(/\b(?:full\s*name|candidate\s*name|name)\s*[:\-]\s*\[?([A-Za-z][A-Za-z'\-.\s]{2,40}?)\]?\s*(?:\n|$)/i);
+  if (labelMatch) {
+    const candidate = labelMatch[1].split("\n")[0].trim();
+    if (looksLikeName(candidate)) return toTitleCase(candidate);
+  }
+
   const lines = text.split("\n").map(L => L.trim()).filter(Boolean).slice(0, 20);
   for (const line of lines) {
     if (looksLikeName(line)) {
       return toTitleCase(line);
     }
   }
-  // Fallback: derive from filename ("John_Doe_CV.pdf" -> "John Doe")
+
+  // Fallback: derive from filename, but only if the filename actually
+  // looks like a name ("John_Doe_CV.pdf") rather than a random ID
+  // (many bulk-downloaded CVs are just numeric timestamps) — a fabricated
+  // "name" from a meaningless filename is worse than leaving it blank.
   let base = fileName.replace(/\.[^.]+$/, "");
   base = base.replace(/[_\-]+/g, " ");
   base = base.replace(/\b(cv|resume|résumé|final|updated|new|copy|version\s?\d*)\b/gi, "");
   base = base.replace(/\s+/g, " ").trim();
-  return base ? toTitleCase(base) : "";
+  if (base && /[a-zA-Z]{2,}/.test(base)) {
+    return toTitleCase(base);
+  }
+  return "";
 }
 
 function toTitleCase(str) {
@@ -159,82 +234,14 @@ function toTitleCase(str) {
     .trim();
 }
 
-// ---------- LinkedIn ----------
-function extractLinkedIn(text) {
-  const M = text.match(/(?:https?:\/\/)?(?:[a-z]{2,3}\.)?linkedin\.com\/(?:in|pub)\/[a-zA-Z0-9\-_%]+\/?/i);
-  if (!M) return "";
-  let url = M[0];
-  if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-  return url.replace(/\/$/, "");
-}
-
-// ---------- years of experience ----------
-function extractYearsExperience(text) {
-  // Look for explicit "N years / N+ years [of] experience" mentions first —
-  // usually a summary line and the most reliable signal.
-  const explicit = text.match(/(\d{1,2})\+?\s*(?:years?|yrs?)\s*(?:of\s*)?(?:relevant\s*|professional\s*|work(?:ing)?\s*)?experience/gi);
-  if (explicit && explicit.length) {
-    const nums = explicit.map(S => parseInt(S.match(/\d{1,2}/)[0], 10)).filter(N => N > 0 && N <= 50);
-    if (nums.length) return Math.max(...nums);
-  }
-  // Fallback: infer from an "Experience" section's date ranges (e.g. 2018 - 2023, 2019 - Present).
-  const yearMatches = [...text.matchAll(/\b(19[5-9]\d|20[0-4]\d)\b\s*[-–—to]{1,4}\s*(present|current|now|\b(19[5-9]\d|20[0-4]\d)\b)/gi)];
-  if (yearMatches.length) {
-    const currentYear = new Date().getFullYear();
-    let earliest = currentYear;
-    yearMatches.forEach(M => {
-      const start = parseInt(M[1], 10);
-      if (start < earliest) earliest = start;
-    });
-    const span = currentYear - earliest;
-    if (span > 0 && span <= 50) return span;
-  }
-  return null;
-}
-
-// ---------- tags / skills ----------
-function extractTags(text) {
-  const lines = text.split("\n").map(L => L.trim());
-  const isHeader = (L) => {
-    const lower = L.toLowerCase().replace(/:$/, "");
-    return HEADER_WORDS.some(W => lower === W);
-  };
-  let start = -1;
-  for (let I = 0; I < lines.length; I++) {
-    const lower = lines[I].toLowerCase().replace(/:$/, "");
-    if (lower === "skills" || lower === "core skills" || lower === "key skills" || lower === "technical skills") {
-      start = I + 1;
-      break;
-    }
-  }
-  if (start === -1) return [];
-  let end = lines.length;
-  for (let I = start; I < lines.length; I++) {
-    if (lines[I] && isHeader(lines[I]) && lines[I].toLowerCase() !== "skills") { end = I; break; }
-  }
-  const block = lines.slice(start, Math.min(end, start + 12)).join(", ");
-  const raw = block.split(/[,•|;\u2022\n]/).map(S => S.trim()).filter(Boolean);
-  const tags = [];
-  const seen = new Set();
-  for (const R of raw) {
-    const clean = R.replace(/^[-–—•*]\s*/, "").trim();
-    if (!clean || clean.length < 2 || clean.length > 30) continue;
-    const key = clean.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    tags.push(clean);
-    if (tags.length >= 15) break;
-  }
-  return tags;
-}
-
 function extractFields(text, fileName) {
   const email = extractEmail(text);
-  const phone = extractPhone(text);
-  const country = extractCountry(text, phone);
+  let phone = extractPhone(text);
+  let country = extractCountry(text, phone);
+  phone = normalizePhoneWithCountry(phone, country);
+  if (!country && phone && phone.startsWith("+")) {
+    country = extractCountry(text, phone); // re-check now that phone carries a dial code
+  }
   const name = extractName(text, fileName);
-  const linkedin = extractLinkedIn(text);
-  const yearsExp = extractYearsExperience(text);
-  const tags = extractTags(text);
-  return { name, email, phone, country, linkedin, yearsExp, tags };
+  return { name, email, phone, country };
 }
