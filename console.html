@@ -9,10 +9,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <style>html.checking body { visibility: hidden; }</style>
+<script src="config.js"></script>
 <script src="auth.js"></script>
 <script>
   // Runs before the rest of the page paints. Not authed? Straight back
-  // to login.html — no flash of candidate data, no overlay to fight.
+  // to index.html — no flash of candidate data, no overlay to fight.
   if (!AUTH.guard()) {
     // guard() already redirected; nothing else to do.
   } else {
@@ -27,7 +28,7 @@
     <span class="brand-mark">✂︎</span>
     <div class="brand-text">
       <h1>Intake</h1>
-      <P>CV sorter &amp; mini ATS</P>
+      <p>CV sorter &amp; mini ATS</p>
     </div>
   </div>
   <div class="topbar-actions">
@@ -44,11 +45,11 @@
     <h2 class="panel-title"><span class="idx">01</span>Bring in CVs</h2>
 
     <div id="dropzone" class="dropzone">
-      <P class="dz-lead">Drop CV files here</P>
-      <P class="dz-sub">or</P>
+      <p class="dz-lead">Drop CV files here</p>
+      <p class="dz-sub">or</p>
       <label for="fileInput" class="btn btn-primary">Choose files</label>
       <input id="fileInput" type="file" multiple accept=".pdf,.docx" hidden>
-      <P class="dz-hint">PDF and DOCX · select as many as you like at once</P>
+      <p class="dz-hint">PDF and DOCX · select as many as you like at once</p>
     </div>
 
     <div id="queueList" class="queue-list" hidden>
@@ -62,11 +63,11 @@
     <div class="intake-divider"></div>
 
     <h2 class="panel-title"><span class="idx">02</span>Score against a role <span class="optional">optional</span></h2>
-    <P class="panel-note">
+    <p class="panel-note">
       One requirement per line or comma. Start a line with <code>!</code> or <code>must:</code> for a must-have
       (weighted double, and missing it caps the score). Mention "3+ years experience" to also weigh a candidate's
       detected years of experience.
-    </P>
+    </p>
     <textarea id="jdInput" placeholder="e.g.&#10;!React&#10;!3+ years experience&#10;Node.js&#10;Lagos, remote-friendly"></textarea>
     <button id="btnScore" class="btn btn-secondary btn-sm">Apply scoring</button>
 
@@ -80,7 +81,7 @@
       <button id="btnZip" class="btn btn-outline">Download CVs (renamed .zip)</button>
     </div>
     <button id="btnPushSheet" class="btn btn-primary btn-block">Push new rows to Google Sheet</button>
-    <P id="pushStatus" class="push-status"></P>
+    <p id="pushStatus" class="push-status"></p>
   </section>
 
   <!-- RIGHT: MANIFEST -->
@@ -127,8 +128,8 @@
     </div>
 
     <div id="emptyState" class="empty-state">
-      <P>Nothing sorted yet.</P>
-      <P class="empty-sub">Add CVs on the left and hit <strong>Sort them out</strong> — extracted candidates will line up here as an editable ledger.</P>
+      <p>Nothing sorted yet.</p>
+      <p class="empty-sub">Add CVs on the left and hit <strong>Sort them out</strong> — extracted candidates will line up here as an editable ledger.</p>
     </div>
 
     <div id="tableWrap" class="table-wrap" hidden>
@@ -169,23 +170,18 @@
       <h3>Google Sheet connection</h3>
       <button id="btnCloseSettings" class="btn-icon">✕</button>
     </div>
-    <P class="modal-note">
-      Paste the Web App URL from your deployed Apps Script (see <code>apps-script.gs</code> and the README that shipped with this app). Once connected, "Push new rows" appends the manifest straight into your sheet.
-    </P>
-    <label class="field-label" for="webAppUrl">Apps Script Web App URL</label>
-    <input id="webAppUrl" type="text" placeholder="https://script.google.com/macros/s/…/exec">
-    <label class="field-label" for="apiSecret">API secret <span class="optional">must match SECRET in apps-script.gs</span></label>
-    <input id="apiSecret" type="text" placeholder="a secret only you know">
+    <p class="modal-note">
+      The sheet backend is set once in <code>config.js</code> — no per-device setup needed. The same password that unlocks this console also authorizes "Push new rows" to write into your sheet.
+    </p>
     <div class="modal-actions">
-      <button id="btnSaveSettings" class="btn btn-primary">Save connection</button>
       <button id="btnTestSettings" class="btn btn-outline">Test connection</button>
     </div>
-    <P id="settingsStatus" class="settings-status"></P>
+    <p id="settingsStatus" class="settings-status"></p>
     <div class="modal-divider"></div>
-    <P class="modal-note">
+    <p class="modal-note">
       The manifest autosaves to this browser as you go, so an accidental refresh won't lose your edits (original CV
       files themselves can't be restored after a refresh — re-drop them if you need to re-export or re-zip).
-    </P>
+    </p>
     <button id="btnClearAll" class="btn btn-outline btn-danger-outline">Clear all candidates from this browser</button>
   </div>
 </div>
@@ -195,7 +191,7 @@
   <div class="drawer">
     <div class="modal-head">
       <h3 id="drawerName">Candidate</h3>
-      <button id="btnCloseDrawer">×</button>
+      <button id="btnCloseDrawer" class="btn-icon">✕</button>
     </div>
 
     <div class="drawer-grid">
@@ -288,11 +284,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="auth.js"></script>
-<script>
-  AUTH.guard();
-</script>
-
 <script src="countries.js"></script>
 <script src="extract.js"></script>
 <script src="app.js"></script>
