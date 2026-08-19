@@ -513,6 +513,9 @@ select.status-select {
   z-index: 50;
   padding: 20px;
 }
+.modal-overlay[hidden] {
+  display: none;
+}
 .modal {
   background: var(--paper-raised);
   border-radius: var(--radius);
