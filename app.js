@@ -163,8 +163,8 @@ async function processQueue() {
   for (const item of pendingFiles) {
     el("btnProcess").textContent = `Sorting ${done + 1} of ${total}…`;
     try {
-      const text = await fileToText(item.file);
-      const fields = extractFields(text, item.file.name);
+      const { text, headerText } = await fileToText(item.file);
+      const fields = extractFields(text, item.file.name, headerText);
       state.candidates.push({
         id: state.nextId++,
         name: fields.name,
@@ -863,17 +863,17 @@ el("btnPushSheet").addEventListener("click", async () => {
     const payload = {
       action: "append",
       passwordHash: AUTH.passwordHash(),
-      rows: rows.map(c => ({
-        name: c.name, email: c.email, phone: c.phone, linkedin: c.linkedin || "",
-        country: c.country, yearsExp: c.yearsExp ?? "", tags: (c.tags || []).join("; "),
-        score: c.score ?? "", rating: c.rating ?? "", status: c.status,
-        source: c.source || "", interviewDate: c.interviewDate || "",
-        starred: c.starred ? "Yes" : "", notes: flattenNotes(c), fileName: c.fileName,
+      rows: rows.map(C => ({
+        name: C.name, email: C.email, phone: C.phone, linkedin: C.linkedin || "",
+        country: C.country, yearsExp: C.yearsExp ?? "", tags: (C.tags || []).join("; "),
+        score: C.score ?? "", rating: C.rating ?? "", status: C.status,
+        source: C.source || "", interviewDate: C.interviewDate || "",
+        starred: C.starred ? "Yes" : "", notes: flattenNotes(C), fileName: C.fileName,
       })),
     };
-    const res = await sheetRequest(url, payload);
+    const res = await sheetRequest(payload);
     if (res && res.ok) {
-      rows.forEach(c => (c.pushed = true));
+      rows.forEach(C => (C.pushed = true));
       scheduleSave();
       setPushStatus(`Pushed ${rows.length} row${rows.length === 1 ? "" : "s"} to the sheet.`, true);
     } else if (res && res.error === "Unauthorized") {
@@ -886,9 +886,9 @@ el("btnPushSheet").addEventListener("click", async () => {
   }
 });
 function setPushStatus(msg, ok) {
-  const p = el("pushStatus");
-  p.textContent = msg;
-  p.className = "push-status " + (ok ? "ok" : "err");
+  const P = el("pushStatus");
+  P.textContent = msg;
+  P.className = "push-status " + (ok ? "ok" : "err");
 }
 
 // ---------- utils ----------
